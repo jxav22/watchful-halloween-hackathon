@@ -7,6 +7,8 @@ import type { GenerationProgress } from "@/types";
 
 interface LoadingPageProps {
   onShowBook: () => void;
+  generationStartTime?: number | null;
+  hasGeneratedBook?: boolean;
 }
 
 const GENERATION_STEPS: GenerationProgress[] = [
@@ -19,10 +21,51 @@ const GENERATION_STEPS: GenerationProgress[] = [
   { step: "Combining all content", status: "pending" },
 ];
 
-export function LoadingPage({ onShowBook }: LoadingPageProps) {
+export function LoadingPage({ onShowBook, generationStartTime, hasGeneratedBook }: LoadingPageProps) {
   const [steps, setSteps] = useState<GenerationProgress[]>(GENERATION_STEPS);
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [baseDelay, setBaseDelay] = useState(800);
+
+  // When generation completes, accelerate to finish quickly
+  useEffect(() => {
+    if (hasGeneratedBook && !isComplete) {
+      // Fast-forward remaining steps
+      const remainingSteps = steps.length - currentStep;
+      if (remainingSteps > 0) {
+        // Complete all remaining steps quickly
+        setTimeout(() => {
+          setSteps((prev) =>
+            prev.map((step, idx) => {
+              if (idx >= currentStep) {
+                return { ...step, status: "completed" as const };
+              }
+              return step;
+            })
+          );
+          setCurrentStep(steps.length);
+          setIsComplete(true);
+        }, Math.max(300, baseDelay * 0.3)); // Quick completion
+      }
+    }
+  }, [hasGeneratedBook, isComplete, currentStep, steps.length, baseDelay]);
+
+  // Dynamically adjust speed based on how long generation is taking
+  useEffect(() => {
+    if (!generationStartTime || hasGeneratedBook) return;
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - generationStartTime;
+      
+      // If generation is taking longer than expected, slow down steps
+      if (elapsed > 8000) {
+        const slowdown = Math.min(2000, 800 + (elapsed - 8000) / 8);
+        setBaseDelay(prev => Math.max(prev, slowdown));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [generationStartTime, hasGeneratedBook]);
 
   useEffect(() => {
     if (currentStep < steps.length) {
@@ -36,14 +79,14 @@ export function LoadingPage({ onShowBook }: LoadingPageProps) {
           })
         );
         setCurrentStep((prev) => prev + 1);
-      }, 800);
+      }, baseDelay);
 
       return () => clearTimeout(timer);
     } else if (!isComplete) {
       // All steps completed
       setIsComplete(true);
     }
-  }, [currentStep, steps.length, isComplete]);
+  }, [currentStep, steps.length, isComplete, baseDelay]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8">

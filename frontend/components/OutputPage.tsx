@@ -71,13 +71,37 @@ export function OutputPage({ book, onBack }: OutputPageProps) {
         {/* Book Info */}
         <div className="bg-card/30 border border-border rounded-xl p-6 space-y-2">
           <h2 className="text-xl font-semibold text-white">{book.title}</h2>
-          <p className="text-gray-400 text-sm">
-            Age Range: {book.ageRange}+ years old
-          </p>
+          <div className="flex flex-wrap gap-3 items-center">
+            <p className="text-gray-400 text-sm">
+              Age Range: {book.ageRange}+ years old
+            </p>
+            {book.style && (
+              <span className="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                Style: {book.style}
+              </span>
+            )}
+          </div>
           <p className="text-gray-500 text-xs">
             Generated: {new Date(book.generatedAt).toLocaleString()}
           </p>
         </div>
+
+        {/* Page Details - Show emotions */}
+        {book.pages.some(page => page.emotion) && (
+          <div className="bg-card/30 border border-border rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Story Emotions</h3>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {book.pages.map((page) => (
+                page.emotion && (
+                  <div key={page.pageNumber} className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-500">Page {page.pageNumber}:</span>
+                    <span className="text-white font-medium">{page.emotion}</span>
+                  </div>
+                )
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
