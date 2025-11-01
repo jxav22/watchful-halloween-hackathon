@@ -107,7 +107,7 @@ export function LoadingPage({
           setSteps((prev) => prev.map((step) => ({ ...step, status: "completed" as const })));
           setCurrentStep(steps.length);
           setIsComplete(true);
-        }, 300);
+        }, 800);
       } catch (error) {
         console.error("Failed to generate book:", error);
         const errorMessage = error instanceof Error ? error.message : "Failed to generate book";
@@ -135,7 +135,7 @@ export function LoadingPage({
         })
       );
       setCurrentStep((prev) => prev + 1);
-    }, 20000);
+    }, 15000);
 
     return () => clearTimeout(timer);
   }, [currentStep, steps.length, isComplete]);

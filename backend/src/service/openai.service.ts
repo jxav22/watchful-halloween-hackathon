@@ -118,6 +118,50 @@ export class OpenAIService {
   }
 
   /**
+   * Process enhanced prompt through GPT to rewrite it for guaranteed safety
+   * Ensures the prompt is safe for children's picture books according to strict safety rules
+   */
+  private async processPromptForSafety(enhancedPrompt: string): Promise<string> {
+    try {
+      const safetyProcessingPrompt = `Your task is to rewrite image prompts so they are guaranteed safe for a children's picture book.
+
+Rules:
+- Absolutely no references to harm, fear, danger, violence, sadness, death, injury, illness, or anything frightening.
+- Replace any phrase that could imply gore, severed body parts, "heads" without bodies, or frightening expressions.
+- Replace any "eating" description with "smiling while holding" or "taking a small friendly bite."
+- Do not use "eyes closed" in emotional scenes (replace with "smiling gently").
+- If characters are non-human (e.g., pumpkins), describe them as "friendly characters with full bodies and happy expressions."
+- Always maintain a warm, playful, child-friendly tone.
+
+Output:
+A single, clean rewritten prompt that is cheerful, gentle, friendly, and safe.
+
+Rewrite this image prompt:
+${enhancedPrompt}`;
+
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'user',
+            content: safetyProcessingPrompt,
+          },
+        ],
+        temperature: 0.3, // Lower temperature for more consistent, safe rewrites
+      });
+
+      const processedPrompt = completion.choices[0]?.message?.content?.trim() || enhancedPrompt;
+      
+      // Fallback to original if processing fails or returns empty
+      return processedPrompt || enhancedPrompt;
+    } catch (error) {
+      console.warn('⚠ Warning: Failed to process prompt for safety, using original enhanced prompt:', error instanceof Error ? error.message : String(error));
+      // Return original prompt if processing fails
+      return enhancedPrompt;
+    }
+  }
+
+  /**
    * Generate images for all pages in the story using DALL-E
    * Uses cheapest settings: standard quality, 1024x1024 size
    * Generates sequentially to maintain character consistency (page 1 first, then others reference it)
@@ -139,9 +183,14 @@ export class OpenAIService {
           const enhancedPrompt1 = this.enhanceImagePrompt(page1.image_prompt, storyTitle, storyText, 1);
           console.log(`[Page 1] Enhanced prompt: ${enhancedPrompt1.substring(0, 150)}...`);
           
+          // Process the enhanced prompt for safety
+          console.log(`[Page 1] Processing prompt for safety...`);
+          const processedPrompt1 = await this.processPromptForSafety(enhancedPrompt1);
+          console.log(`[Page 1] Processed prompt: ${processedPrompt1.substring(0, 150)}...`);
+          
           const image1 = await this.openai.images.generate({
             model: 'dall-e-3',
-            prompt: enhancedPrompt1,
+            prompt: processedPrompt1,
             size: '1024x1024',
             quality: 'standard',
           });
@@ -198,9 +247,14 @@ export class OpenAIService {
           
           console.log(`[Page ${page.page_number}] Enhanced prompt: ${enhancedPrompt.substring(0, 200)}...`);
           
+          // Process the enhanced prompt for safety
+          console.log(`[Page ${page.page_number}] Processing prompt for safety...`);
+          const processedPrompt = await this.processPromptForSafety(enhancedPrompt);
+          console.log(`[Page ${page.page_number}] Processed prompt: ${processedPrompt.substring(0, 200)}...`);
+          
           const image = await this.openai.images.generate({
             model: 'dall-e-3',
-            prompt: enhancedPrompt,
+            prompt: processedPrompt,
             size: '1024x1024',
             quality: 'standard',
           });
