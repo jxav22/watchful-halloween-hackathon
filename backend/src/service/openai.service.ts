@@ -64,6 +64,7 @@ export class OpenAIService {
 
   /**
    * Enhance image prompt with illustration direction style and character consistency
+   * Matches the exact art style defined in storyPrompt.ts (lines 26-30)
    */
   private enhanceImagePrompt(
     imagePrompt: string,
@@ -71,19 +72,16 @@ export class OpenAIService {
     storyText: string,
     pageNumber: number,
   ): string {
-    // Extract main character(s) from story title and text
-    const characterHint = `Main character(s) from "${storyTitle}"`;
+    // Art style from storyPrompt.ts lines 26-30, with Bugs Bunny reference
+    const artStyleInstructions = `Art style: Disney-Pixar × Looney Toons. The character could look like Bugs Bunny from Looney Toons. Keep the same character look and colors in every image. The same child or animal should appear throughout the story`;
     
-    // Strong Disney-style character description
-    const disneyStyle = `Disney classic animation style, Pixar-quality 3D character design, expressive large eyes, soft rounded features, warm friendly expressions, vibrant Disney color palette`;
-    
-    // Character consistency instruction
+    // Character consistency note for all pages
     const consistencyNote = pageNumber === 1 
-      ? `Establish the main character design with distinct features, colors, and appearance that will remain consistent across all pages`
-      : `Maintain the exact same character design, features, colors, and appearance as established in page 1. Same character, same design style`;
+      ? `Establish the main character design that will remain consistent across all pages`
+      : `Use the exact same character design, look, and colors as established in page 1`;
     
     // Complete enhanced prompt
-    return `${imagePrompt}. ${characterHint}. ${disneyStyle}, ${consistencyNote}. Bright colors, rounded shapes, expressive characters, playful energy, Disney storybook illustration quality`;
+    return `${imagePrompt}. ${artStyleInstructions}. ${consistencyNote}`;
   }
 
   /**
