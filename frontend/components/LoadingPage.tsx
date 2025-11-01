@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2 } from "lucide-react";
-import type { GenerationProgress } from "@/types";
+import type { GenerationProgress, BookGenerationRequest, BookOutput } from "@/types";
+import { API_ENDPOINTS } from "@/config/api";
+import type { StoryResponse } from "@/types/backend";
 
 interface LoadingPageProps {
+  bookRequest: BookGenerationRequest;
+  onGenerationComplete: (book: BookOutput) => void;
   onShowBook: () => void;
-  generationStartTime?: number | null;
-  hasGeneratedBook?: boolean;
+  onError?: (error: string) => void;
 }
 
 const GENERATION_STEPS: GenerationProgress[] = [
@@ -21,15 +24,78 @@ const GENERATION_STEPS: GenerationProgress[] = [
   { step: "Combining all content", status: "pending" },
 ];
 
-export function LoadingPage({ onShowBook, generationStartTime, hasGeneratedBook }: LoadingPageProps) {
+export function LoadingPage({ 
+  bookRequest, 
+  onGenerationComplete, 
+  onShowBook, 
+  onError 
+}: LoadingPageProps) {
   const [steps, setSteps] = useState<GenerationProgress[]>(GENERATION_STEPS);
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [generatedBook, setGeneratedBook] = useState<BookOutput | null>(null);
   const [baseDelay, setBaseDelay] = useState(800);
+  const hasCalledApi = useRef(false);
+
+  // Main API call effect - triggers generation on mount
+  useEffect(() => {
+    if (hasCalledApi.current) return; // Prevent duplicate calls
+    
+    hasCalledApi.current = true;
+    
+    const generateBook = async () => {
+      try {
+        const response = await fetch(API_ENDPOINTS.STORY, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: bookRequest.title,
+            paragraph: bookRequest.story,
+            age: bookRequest.ageRange,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Backend error: ${response.status}`);
+        }
+
+        const backendData: StoryResponse = await response.json();
+        
+        // Transform backend response to frontend format
+        const book: BookOutput = {
+          id: `book-${Date.now()}`,
+          title: backendData.story_title || bookRequest.title,
+          ageRange: backendData.target_age || bookRequest.ageRange,
+          generatedAt: new Date().toISOString(),
+          coverImage: undefined,
+          style: backendData.style,
+          pages: backendData.pages.map((page) => ({
+            pageNumber: page.page_number,
+            content: `${page.title}\n\n${page.text}`,
+            imageUrl: page.image_url || undefined,
+            emotion: page.emotion,
+            imagePrompt: page.image_prompt,
+          })),
+        };
+        
+        setGeneratedBook(book);
+        onGenerationComplete(book);
+      } catch (error) {
+        console.error("Failed to generate book:", error);
+        const errorMessage = error instanceof Error ? error.message : "Failed to generate book";
+        if (onError) {
+          onError(errorMessage);
+        }
+      }
+    };
+
+    generateBook();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // When generation completes, accelerate to finish quickly
   useEffect(() => {
-    if (hasGeneratedBook && !isComplete) {
+    if (generatedBook && !isComplete) {
       // Fast-forward remaining steps
       const remainingSteps = steps.length - currentStep;
       if (remainingSteps > 0) {
@@ -48,27 +114,11 @@ export function LoadingPage({ onShowBook, generationStartTime, hasGeneratedBook 
         }, Math.max(300, baseDelay * 0.3)); // Quick completion
       }
     }
-  }, [hasGeneratedBook, isComplete, currentStep, steps.length, baseDelay]);
+  }, [generatedBook, isComplete, currentStep, steps, baseDelay]);
 
-  // Dynamically adjust speed based on how long generation is taking
+  // Step progression animation
   useEffect(() => {
-    if (!generationStartTime || hasGeneratedBook) return;
-
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - generationStartTime;
-      
-      // If generation is taking longer than expected, slow down steps
-      if (elapsed > 8000) {
-        const slowdown = Math.min(2000, 800 + (elapsed - 8000) / 8);
-        setBaseDelay(prev => Math.max(prev, slowdown));
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [generationStartTime, hasGeneratedBook]);
-
-  useEffect(() => {
-    if (currentStep < steps.length) {
+    if (currentStep < steps.length && !generatedBook) {
       const timer = setTimeout(() => {
         setSteps((prev) =>
           prev.map((step, idx) => {
@@ -82,11 +132,11 @@ export function LoadingPage({ onShowBook, generationStartTime, hasGeneratedBook 
       }, baseDelay);
 
       return () => clearTimeout(timer);
-    } else if (!isComplete) {
-      // All steps completed
+    } else if (!isComplete && !generatedBook && currentStep >= steps.length) {
+      // All steps completed but still waiting for API
       setIsComplete(true);
     }
-  }, [currentStep, steps.length, isComplete, baseDelay]);
+  }, [currentStep, steps.length, isComplete, baseDelay, generatedBook]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
@@ -108,7 +158,7 @@ export function LoadingPage({ onShowBook, generationStartTime, hasGeneratedBook 
               <div className="flex-shrink-0 mt-1">
                 {stepItem.status === "completed" ? (
                   <Check className="h-5 w-5 text-green-400" />
-                ) : idx === currentStep ? (
+                ) : idx === currentStep && !generatedBook ? (
                   <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
                 ) : (
                   <div className="h-5 w-5 rounded-full border-2 border-gray-600" />
