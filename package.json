@@ -1,0 +1,20 @@
+{
+  "name": "watchful-halloween-hackathon",
+  "version": "1.0.0",
+  "description": "Transform any story into an enchanting, age-appropriate children's book with AI-powered content validation and beautiful illustrations.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jxav22/watchful-halloween-hackathon.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jxav22/watchful-halloween-hackathon/issues"
+  },
+  "homepage": "https://github.com/jxav22/watchful-halloween-hackathon#readme"
+}
