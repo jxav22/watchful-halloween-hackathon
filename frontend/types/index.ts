@@ -1,37 +1,33 @@
-// API Types for backend integration
-export interface UploadFile {
-  file: File;
-  preview?: string;
-  type: 'image' | 'document';
+// API Types for book generation
+export interface BookGenerationRequest {
+  title: string;
+  ageRange: number;
+  story: string;
 }
 
-export interface ValidationResult {
-  isApproved: boolean;
-  ageRating: string; // e.g., "3+", "7+", "13+"
-  contentWarnings: string[];
-  safetyScore: number; // 0-100
-  recommendations?: BookRecommendation[];
-  analysis?: {
-    hasViolence?: boolean;
-    hasScaryContent?: boolean;
-    hasInappropriateContent?: boolean;
-  };
+export interface BookPage {
+  pageNumber: number;
+  content: string;
+  imageUrl?: string;
 }
 
-export interface BookRecommendation {
+export interface BookOutput {
   id: string;
   title: string;
-  author?: string;
-  ageRange: string;
-  description: string;
-  coverUrl?: string;
-  halloweenThemed: boolean;
+  ageRange: number;
+  pages: BookPage[];
+  coverImage?: string;
+  generatedAt: string;
 }
 
-export interface UploadResponse {
+export interface GenerationProgress {
+  step: string;
+  status: 'pending' | 'in-progress' | 'completed';
+}
+
+export interface GenerationResponse {
   success: boolean;
-  fileId: string;
-  validation: ValidationResult;
+  bookId: string;
+  book: BookOutput;
   message?: string;
 }
-
