@@ -65,6 +65,7 @@ export class OpenAIService {
   /**
    * Enhance image prompt with illustration direction style and character consistency
    * Matches the exact art style defined in storyPrompt.ts (lines 26-30)
+   * Emphasizes kid-friendly appearance and character consistency
    */
   private enhanceImagePrompt(
     imagePrompt: string,
@@ -72,16 +73,19 @@ export class OpenAIService {
     storyText: string,
     pageNumber: number,
   ): string {
-    // Art style from storyPrompt.ts lines 26-30, with Bugs Bunny reference
-    const artStyleInstructions = `Art style: Disney-Pixar × Looney Toons. The character could look like Bugs Bunny from Looney Toons. Keep the same character look and colors in every image. The same child or animal should appear throughout the story`;
+    // Kid-friendly requirements
+    const kidFriendly = `Kid-friendly children's book illustration: friendly faces, soft rounded features, bright cheerful colors, safe happy environment, non-threatening, warm and inviting, age-appropriate`;
     
-    // Character consistency note for all pages
+    // Art style from storyPrompt.ts lines 26-30, with Bugs Bunny reference
+    const artStyleInstructions = `Art style: Disney-Pixar × Looney Toons. The character could look like Bugs Bunny from Looney Toons with expressive large friendly eyes`;
+    
+    // Strong character consistency instructions
     const consistencyNote = pageNumber === 1 
-      ? `Establish the main character design that will remain consistent across all pages`
-      : `Use the exact same character design, look, and colors as established in page 1`;
+      ? `Establish ONE main character with very specific design: same face shape, same eye color, same fur/skin color, same size, same clothing style, same distinctive features. This exact character design MUST be repeated identically in all 5 pages`
+      : `CRITICAL: Use the EXACT SAME character from page 1: identical face, identical eye color, identical fur/skin color, identical size, identical clothing, identical distinctive features. The character must look exactly the same as page 1, just in a different scene or pose`;
     
     // Complete enhanced prompt
-    return `${imagePrompt}. ${artStyleInstructions}. ${consistencyNote}`;
+    return `${imagePrompt}. ${kidFriendly}. ${artStyleInstructions}. ${consistencyNote}`;
   }
 
   /**
@@ -123,47 +127,59 @@ export class OpenAIService {
         }
       }
 
-      // Generate remaining pages in parallel (they reference page 1's character design)
-      const remainingPages = storyResponse.pages.filter((p) => p.page_number > 1);
-      await Promise.all(
-        remainingPages.map(async (page) => {
-          try {
-            console.log(`[Page ${page.page_number}] Generating image (maintaining character consistency)...`);
-            
-            if (!page.image_prompt || page.image_prompt.trim() === '') {
-              console.warn(`[Page ${page.page_number}] No image_prompt found, using static placeholder`);
-              this.assignStaticImageUrl(page, page.page_number - 1);
-              return;
-            }
-            
-            // Enhance prompt with character consistency instructions
-            const enhancedPrompt = this.enhanceImagePrompt(page.image_prompt, storyTitle, storyText, page.page_number);
-            console.log(`[Page ${page.page_number}] Enhanced prompt: ${enhancedPrompt.substring(0, 150)}...`);
-            
-            const image = await this.openai.images.generate({
-              model: 'dall-e-3',
-              prompt: enhancedPrompt,
-              size: '1024x1024',
-              quality: 'standard',
-            });
+      // Extract character details from page 1's image_prompt for consistency
+      const page1CharacterHint = page1?.image_prompt 
+        ? `The main character description from page 1: "${page1.image_prompt.substring(0, 100)}"`
+        : '';
 
-            const imageUrl = image.data?.[0]?.url || null;
-            page.image_url = imageUrl;
-            
-            if (imageUrl) {
-              console.log(`✓ [Page ${page.page_number}] DALL-E image generated: ${imageUrl.substring(0, 50)}...`);
-            } else {
-              console.warn(`⚠ [Page ${page.page_number}] No URL in response, using static placeholder`);
-              this.assignStaticImageUrl(page, page.page_number - 1);
-            }
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            console.error(`✗ [Page ${page.page_number}] Failed to generate image:`, errorMessage);
-            console.log(`[Page ${page.page_number}] Falling back to static placeholder`);
+      // Generate remaining pages sequentially for better consistency (even though slower)
+      const remainingPages = storyResponse.pages
+        .filter((p) => p.page_number > 1)
+        .sort((a, b) => a.page_number - b.page_number);
+
+      for (const page of remainingPages) {
+        try {
+          console.log(`[Page ${page.page_number}] Generating image (maintaining character consistency)...`);
+          
+          if (!page.image_prompt || page.image_prompt.trim() === '') {
+            console.warn(`[Page ${page.page_number}] No image_prompt found, using static placeholder`);
+            this.assignStaticImageUrl(page, page.page_number - 1);
+            continue;
+          }
+          
+          // Enhance prompt with character consistency instructions and page 1 reference
+          let enhancedPrompt = this.enhanceImagePrompt(page.image_prompt, storyTitle, storyText, page.page_number);
+          
+          // Add explicit reference to page 1 character if available
+          if (page1CharacterHint) {
+            enhancedPrompt = `${enhancedPrompt}. ${page1CharacterHint}`;
+          }
+          
+          console.log(`[Page ${page.page_number}] Enhanced prompt: ${enhancedPrompt.substring(0, 200)}...`);
+          
+          const image = await this.openai.images.generate({
+            model: 'dall-e-3',
+            prompt: enhancedPrompt,
+            size: '1024x1024',
+            quality: 'standard',
+          });
+
+          const imageUrl = image.data?.[0]?.url || null;
+          page.image_url = imageUrl;
+          
+          if (imageUrl) {
+            console.log(`✓ [Page ${page.page_number}] DALL-E image generated: ${imageUrl.substring(0, 50)}...`);
+          } else {
+            console.warn(`⚠ [Page ${page.page_number}] No URL in response, using static placeholder`);
             this.assignStaticImageUrl(page, page.page_number - 1);
           }
-        }),
-      );
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error(`✗ [Page ${page.page_number}] Failed to generate image:`, errorMessage);
+          console.log(`[Page ${page.page_number}] Falling back to static placeholder`);
+          this.assignStaticImageUrl(page, page.page_number - 1);
+        }
+      }
 
       const dalleImageCount = storyResponse.pages.filter(
         (p) => p.image_url && !p.image_url.includes('placeholder')
