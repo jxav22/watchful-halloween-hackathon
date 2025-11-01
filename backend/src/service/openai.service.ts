@@ -44,7 +44,7 @@ export class OpenAIService {
       // Generate images for each page if requested
       if (generateImages && storyResponse.pages?.length) {
         console.log('Starting image generation for all pages...');
-        await this.generateImagesForStory(storyResponse);
+        await this.generateImagesForStory(storyResponse, text, paragraph);
       } else {
         console.log('Image generation skipped, using static placeholders');
         // Assign static image URLs if image generation is disabled
@@ -63,26 +63,74 @@ export class OpenAIService {
   }
 
   /**
-   * Enhance image prompt with illustration direction style
+   * Enhance image prompt with illustration direction style and character consistency
    */
-  private enhanceImagePrompt(imagePrompt: string): string {
-    const styleDirection = 'Disney-Pixar × Looney Toons style, bright colors, rounded shapes, expressive characters, playful energy';
-    return `${imagePrompt}. ${styleDirection}`;
+  private enhanceImagePrompt(
+    imagePrompt: string,
+    storyTitle: string,
+    storyText: string,
+    pageNumber: number,
+  ): string {
+    // Extract main character(s) from story title and text
+    const characterHint = `Main character(s) from "${storyTitle}"`;
+    
+    // Strong Disney-style character description
+    const disneyStyle = `Disney classic animation style, Pixar-quality 3D character design, expressive large eyes, soft rounded features, warm friendly expressions, vibrant Disney color palette`;
+    
+    // Character consistency instruction
+    const consistencyNote = pageNumber === 1 
+      ? `Establish the main character design with distinct features, colors, and appearance that will remain consistent across all pages`
+      : `Maintain the exact same character design, features, colors, and appearance as established in page 1. Same character, same design style`;
+    
+    // Complete enhanced prompt
+    return `${imagePrompt}. ${characterHint}. ${disneyStyle}, ${consistencyNote}. Bright colors, rounded shapes, expressive characters, playful energy, Disney storybook illustration quality`;
   }
 
   /**
    * Generate images for all pages in the story using DALL-E
    * Uses cheapest settings: standard quality, 1024x1024 size
-   * Generates all images in parallel for better performance
+   * Generates sequentially to maintain character consistency (page 1 first, then others reference it)
    */
-  private async generateImagesForStory(storyResponse: StoryResponse): Promise<void> {
+  private async generateImagesForStory(
+    storyResponse: StoryResponse,
+    storyTitle: string,
+    storyText: string,
+  ): Promise<void> {
     try {
       console.log(`Generating ${storyResponse.pages.length} images using DALL-E (cheapest settings)...`);
+      console.log(`Story: "${storyTitle}" - maintaining character consistency across all pages`);
 
+      // Generate page 1 first to establish character design
+      const page1 = storyResponse.pages.find((p) => p.page_number === 1);
+      if (page1 && page1.image_prompt && page1.image_prompt.trim() !== '') {
+        try {
+          console.log(`[Page 1] Generating first image (establishing character design)...`);
+          const enhancedPrompt1 = this.enhanceImagePrompt(page1.image_prompt, storyTitle, storyText, 1);
+          console.log(`[Page 1] Enhanced prompt: ${enhancedPrompt1.substring(0, 150)}...`);
+          
+          const image1 = await this.openai.images.generate({
+            model: 'dall-e-3',
+            prompt: enhancedPrompt1,
+            size: '1024x1024',
+            quality: 'standard',
+          });
+
+          page1.image_url = image1.data?.[0]?.url || null;
+          if (page1.image_url) {
+            console.log(`✓ [Page 1] Character design established: ${page1.image_url.substring(0, 50)}...`);
+          }
+        } catch (error) {
+          console.error(`✗ [Page 1] Failed:`, error);
+          this.assignStaticImageUrl(page1, 0);
+        }
+      }
+
+      // Generate remaining pages in parallel (they reference page 1's character design)
+      const remainingPages = storyResponse.pages.filter((p) => p.page_number > 1);
       await Promise.all(
-        storyResponse.pages.map(async (page) => {
+        remainingPages.map(async (page) => {
           try {
-            console.log(`[Page ${page.page_number}] Generating image...`);
+            console.log(`[Page ${page.page_number}] Generating image (maintaining character consistency)...`);
             
             if (!page.image_prompt || page.image_prompt.trim() === '') {
               console.warn(`[Page ${page.page_number}] No image_prompt found, using static placeholder`);
@@ -90,16 +138,15 @@ export class OpenAIService {
               return;
             }
             
-            // Enhance prompt with illustration direction style
-            const enhancedPrompt = this.enhanceImagePrompt(page.image_prompt);
-            console.log(`[Page ${page.page_number}] Enhanced prompt: ${enhancedPrompt.substring(0, 120)}...`);
+            // Enhance prompt with character consistency instructions
+            const enhancedPrompt = this.enhanceImagePrompt(page.image_prompt, storyTitle, storyText, page.page_number);
+            console.log(`[Page ${page.page_number}] Enhanced prompt: ${enhancedPrompt.substring(0, 150)}...`);
             
-            // Use cheapest DALL-E settings: standard quality, 1024x1024 size
             const image = await this.openai.images.generate({
               model: 'dall-e-3',
               prompt: enhancedPrompt,
-              size: '1024x1024', // Cheapest size option
-              quality: 'standard', // Cheapest quality option (not 'hd')
+              size: '1024x1024',
+              quality: 'standard',
             });
 
             const imageUrl = image.data?.[0]?.url || null;
