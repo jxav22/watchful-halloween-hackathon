@@ -15,13 +15,13 @@ interface LoadingPageProps {
 }
 
 const GENERATION_STEPS: GenerationProgress[] = [
-  { step: "Reading your transcript", status: "pending" },
-  { step: "Interpreting your transcript based on Age and Validation rules", status: "pending" },
-  { step: "reviewing uploaded imagery", status: "pending" },
-  { step: "Re aligning imagery based on Age range", status: "pending" },
-  { step: "Outputting story chapters", status: "pending" },
-  { step: "Merging story chapter with imagery", status: "pending" },
-  { step: "Combining all content", status: "pending" },
+  { step: "Processing your input", status: "pending" },
+  { step: "Adjusting content for age-appropriate reading", status: "pending" },
+  { step: "Generating story illustrations", status: "pending" },
+  { step: "Applying final touches to the content", status: "pending" },
+  { step: "Performing quality checks", status: "pending" },
+  { step: "Preparing the final output", status: "pending" },
+  { step: "Compiling everything together", status: "pending" },
 ];
 
 export function LoadingPage({ 
@@ -34,24 +34,104 @@ export function LoadingPage({
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const hasCalledApi = useRef(false);
+  const preloadAbortController = useRef<AbortController | null>(null);
 
-  // Preload all images from the book using native browser Image API
-  // This is the recommended approach for dynamic remote URLs in Next.js
-  const preloadImages = (pages: Array<{ imageUrl?: string }>) => {
-    const imagePromises = pages
-      .map((page) => page.imageUrl)
-      .filter((url): url is string => !!url)
-      .map(
-        (url) =>
-          new Promise<void>((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve();
-            img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
-            img.src = url;
-          })
-      );
+  // Preload all images from the book with timeout and better error handling
+  const preloadImages = async (
+    pages: Array<{ imageUrl?: string }>,
+    coverImage?: string,
+    timeout: number = 30000
+  ): Promise<{ loaded: number; failed: number; total: number }> => {
+    // Collect all image URLs
+    const imageUrls: string[] = [];
     
-    return Promise.all(imagePromises);
+    // Add cover image if present
+    if (coverImage) {
+      imageUrls.push(coverImage);
+    }
+    
+    // Add page images
+    pages.forEach((page) => {
+      if (page.imageUrl) {
+        imageUrls.push(page.imageUrl);
+      }
+    });
+
+    if (imageUrls.length === 0) {
+      return { loaded: 0, failed: 0, total: 0 };
+    }
+
+    // Create abort controller for cleanup
+    preloadAbortController.current = new AbortController();
+    const signal = preloadAbortController.current.signal;
+
+    // Preload each image with timeout
+    const preloadPromises = imageUrls.map((url) => {
+      return new Promise<{ url: string; success: boolean }>((resolve) => {
+        // Timeout promise
+        const timeoutPromise = new Promise<{ url: string; success: boolean }>((timeoutResolve) => {
+          setTimeout(() => {
+            timeoutResolve({ url, success: false });
+          }, timeout);
+        });
+
+        // Image load promise
+        const imagePromise = new Promise<{ url: string; success: boolean }>((imageResolve) => {
+          if (signal.aborted) {
+            imageResolve({ url, success: false });
+            return;
+          }
+
+          const img = new Image();
+          
+          img.onload = () => {
+            if (!signal.aborted) {
+              imageResolve({ url, success: true });
+            }
+          };
+          
+          img.onerror = () => {
+            if (!signal.aborted) {
+              imageResolve({ url, success: false });
+            }
+          };
+
+          // Set src after attaching handlers
+          img.src = url;
+          
+          // If image is already cached, trigger load immediately
+          if (img.complete) {
+            imageResolve({ url, success: true });
+          }
+        });
+
+        // Race between image load and timeout
+        Promise.race([imagePromise, timeoutPromise]).then(resolve);
+      });
+    });
+
+    // Wait for all images to settle (regardless of success/failure)
+    const results = await Promise.allSettled(preloadPromises);
+    
+    const stats = {
+      loaded: 0,
+      failed: 0,
+      total: imageUrls.length,
+    };
+
+    results.forEach((result) => {
+      if (result.status === "fulfilled") {
+        if (result.value.success) {
+          stats.loaded++;
+        } else {
+          stats.failed++;
+        }
+      } else {
+        stats.failed++;
+      }
+    });
+
+    return stats;
   };
 
   // Main API call effect - triggers generation on mount
@@ -97,10 +177,18 @@ export function LoadingPage({
         
         onGenerationComplete(book);
         
-        // Preload all images in the background
-        preloadImages(book.pages).catch((error) => {
-          console.warn("Some images failed to preload:", error);
-        });
+        // Preload all images in the background (non-blocking)
+        preloadImages(book.pages, book.coverImage)
+          .then((stats) => {
+            if (stats.total > 0) {
+              console.log(
+                `Image preload complete: ${stats.loaded}/${stats.total} loaded, ${stats.failed} failed`
+              );
+            }
+          })
+          .catch((error) => {
+            console.warn("Image preload error:", error);
+          });
         
         // Mark all steps as complete once API call finishes
         setTimeout(() => {
@@ -118,6 +206,13 @@ export function LoadingPage({
     };
 
     generateBook();
+
+    // Cleanup: abort image preloading if component unmounts
+    return () => {
+      if (preloadAbortController.current) {
+        preloadAbortController.current.abort();
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
