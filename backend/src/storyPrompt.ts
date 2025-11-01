@@ -4,29 +4,30 @@
  *    Ultra-optimized, syntax-checked prompt builder for story generation.
  *
  *Defines title, paragraph, and age cleanly and minimizes token usage.*/
-export const storybookPrompt = (title: string, story: string, age: number): string => {
+export const storybookPrompt = (title: string, story: string, age: number, character?: string): string => {
   return `
-Create a five-page illustrated children's storybook based on the story below.
+Write a five-page story for a ${age}-year-old child.
+
+Use very simple words so the child can read alone.
 
 Title: "${title}"
-Age: ${age} years old
 Story: """${story}"""
 
-Each page must include:
-- "title": 2–5 words
-- "text": 2–4 short sentences (max 70 words)
-- "emotion": one simple feeling (e.g., happy, brave, curious)
-- "image_prompt": a clear visual description for an illustration
+Each page must have:
+- title (2–4 easy words)
+- text (2–3 short sentences)
+- emotion (happy, brave, silly, etc.)
+- image_prompt (same main character and setting each page)
 
-Use warm, imaginative storytelling suitable for a ${age}-year-old
-in New Zealand or Australia. Avoid fear, violence, or adult themes.
+Tone: fun, kind, gentle.
 
-Keep the tone friendly and curious, encouraging themes of kindness, friendship,
-and discovery.
+Keep story simple and warm.
 
-Illustration direction:
-- Disney-Pixar × Looney Toons style
-- Bright colors, rounded shapes, expressive characters, playful energy.
+Art style:
+- Disney-Pixar × Looney Toons
+- Keep the same character look and colors in every image
+- The same child or animal should appear throughout the story
+${character ? `Use this character as the main one: ${character}` : ''}
 
 Return JSON only in this exact format:
 
