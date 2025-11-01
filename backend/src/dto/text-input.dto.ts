@@ -1,4 +1,12 @@
-import { IsString, IsNotEmpty, IsNumber, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  Min,
+  Max,
+  IsBoolean,
+  IsOptional,
+} from 'class-validator';
 
 export class TextInputDto {
   @IsString()
@@ -13,5 +21,9 @@ export class TextInputDto {
   @Min(3)
   @Max(12)
   age: number;
+
+  @IsBoolean()
+  @IsOptional()
+  generate_images?: boolean;
 }
 

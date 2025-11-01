@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2 } from "lucide-react";
-import type { GenerationProgress } from "@/types";
+import type { GenerationProgress, BookGenerationRequest, BookOutput } from "@/types";
+import { API_ENDPOINTS } from "@/config/api";
+import type { StoryResponse } from "@/types/backend";
 
 interface LoadingPageProps {
+  bookRequest: BookGenerationRequest;
+  onGenerationComplete: (book: BookOutput) => void;
   onShowBook: () => void;
+  onError?: (error: string) => void;
 }
 
 const GENERATION_STEPS: GenerationProgress[] = [
@@ -19,30 +24,120 @@ const GENERATION_STEPS: GenerationProgress[] = [
   { step: "Combining all content", status: "pending" },
 ];
 
-export function LoadingPage({ onShowBook }: LoadingPageProps) {
+export function LoadingPage({ 
+  bookRequest, 
+  onGenerationComplete, 
+  onShowBook, 
+  onError 
+}: LoadingPageProps) {
   const [steps, setSteps] = useState<GenerationProgress[]>(GENERATION_STEPS);
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const hasCalledApi = useRef(false);
 
-  useEffect(() => {
-    if (currentStep < steps.length) {
-      const timer = setTimeout(() => {
-        setSteps((prev) =>
-          prev.map((step, idx) => {
-            if (idx === currentStep) {
-              return { ...step, status: "completed" };
-            }
-            return step;
+  // Preload all images from the book using native browser Image API
+  // This is the recommended approach for dynamic remote URLs in Next.js
+  const preloadImages = (pages: Array<{ imageUrl?: string }>) => {
+    const imagePromises = pages
+      .map((page) => page.imageUrl)
+      .filter((url): url is string => !!url)
+      .map(
+        (url) =>
+          new Promise<void>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+            img.src = url;
           })
-        );
-        setCurrentStep((prev) => prev + 1);
-      }, 800);
+      );
+    
+    return Promise.all(imagePromises);
+  };
 
-      return () => clearTimeout(timer);
-    } else if (!isComplete) {
-      // All steps completed
-      setIsComplete(true);
-    }
+  // Main API call effect - triggers generation on mount
+  useEffect(() => {
+    if (hasCalledApi.current) return; // Prevent duplicate calls
+    
+    hasCalledApi.current = true;
+    
+    const generateBook = async () => {
+      try {
+        const response = await fetch(API_ENDPOINTS.STORY, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: bookRequest.title,
+            paragraph: bookRequest.story,
+            age: bookRequest.ageRange,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Backend error: ${response.status}`);
+        }
+
+        const backendData: StoryResponse = await response.json();
+        
+        // Transform backend response to frontend format
+        const book: BookOutput = {
+          id: `book-${Date.now()}`,
+          title: backendData.story_title || bookRequest.title,
+          ageRange: backendData.target_age || bookRequest.ageRange,
+          generatedAt: new Date().toISOString(),
+          coverImage: undefined,
+          style: backendData.style,
+          pages: backendData.pages.map((page) => ({
+            pageNumber: page.page_number,
+            content: `${page.title}\n\n${page.text}`,
+            imageUrl: page.image_url || undefined,
+            emotion: page.emotion,
+            imagePrompt: page.image_prompt,
+          })),
+        };
+        
+        onGenerationComplete(book);
+        
+        // Preload all images in the background
+        preloadImages(book.pages).catch((error) => {
+          console.warn("Some images failed to preload:", error);
+        });
+        
+        // Mark all steps as complete once API call finishes
+        setTimeout(() => {
+          setSteps((prev) => prev.map((step) => ({ ...step, status: "completed" as const })));
+          setCurrentStep(steps.length);
+          setIsComplete(true);
+        }, 800);
+      } catch (error) {
+        console.error("Failed to generate book:", error);
+        const errorMessage = error instanceof Error ? error.message : "Failed to generate book";
+        if (onError) {
+          onError(errorMessage);
+        }
+      }
+    };
+
+    generateBook();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Animate through steps while API is loading
+  useEffect(() => {
+    if (isComplete || currentStep >= steps.length) return;
+
+    const timer = setTimeout(() => {
+      setSteps((prev) =>
+        prev.map((step, idx) => {
+          if (idx === currentStep) {
+            return { ...step, status: "completed" };
+          }
+          return step;
+        })
+      );
+      setCurrentStep((prev) => prev + 1);
+    }, 15000);
+
+    return () => clearTimeout(timer);
   }, [currentStep, steps.length, isComplete]);
 
   return (

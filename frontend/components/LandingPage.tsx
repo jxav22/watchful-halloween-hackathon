@@ -6,7 +6,7 @@ import Image from "next/image";
 import type { BookGenerationRequest } from "@/types";
 
 interface LandingPageProps {
-  onGenerate: (data: BookGenerationRequest) => void;
+  onGenerate: (data: BookGenerationRequest) => Promise<void>;
   onBack: () => void;
 }
 
@@ -16,12 +16,12 @@ export function LandingPage({ onGenerate, onBack }: LandingPageProps) {
   const [story, setStory] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!title || !story) {
       alert("Please fill in all fields");
       return;
     }
-    onGenerate({ title, ageRange, story });
+    await onGenerate({ title, ageRange, story });
   };
 
   const handleStoryChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

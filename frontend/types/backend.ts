@@ -1,3 +1,4 @@
+// Backend API Response Types (matching NestJS backend)
 export interface StoryPage {
   page_number: number;
   title: string;
