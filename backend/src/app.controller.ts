@@ -18,11 +18,28 @@ export class AppController {
 
   @Post('story')
   async getOpenAIResponse(@Body() textInputDto: TextInputDto): Promise<StoryResponse> {
+    console.log('📥 Request received:', {
+      text: textInputDto.text,
+      paragraph: textInputDto.paragraph?.substring(0, 50),
+      age: textInputDto.age,
+      generate_images: textInputDto.generate_images,
+    });
+    
+    // Default to true if undefined (always generate images unless explicitly disabled)
+    const generateImages = textInputDto.generate_images !== false;
+    console.log(`🖼️  Image generation: ${generateImages ? 'ENABLED' : 'DISABLED'}`);
+    
     const response = await this.openAIService.generateResponse(
       textInputDto.text,
       textInputDto.paragraph,
       textInputDto.age,
+      generateImages,
     );
+    
+    console.log('📤 Response ready with image URLs:', 
+      response.pages.map(p => ({ page: p.page_number, hasUrl: !!p.image_url }))
+    );
+    
     return response;
   }
 }
