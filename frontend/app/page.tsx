@@ -13,6 +13,7 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState<PageState>("home");
   const [bookData, setBookData] = useState<BookGenerationRequest | null>(null);
   const [generatedBook, setGeneratedBook] = useState<BookOutput | null>(null);
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
 
   const handleGetStarted = () => {
     setCurrentPage("landing");
@@ -22,11 +23,14 @@ export default function Home() {
     setCurrentPage("home");
     setBookData(null);
     setGeneratedBook(null);
+    setGenerationStartTime(null);
   };
 
   const handleGenerate = async (data: BookGenerationRequest) => {
     setBookData(data);
     setCurrentPage("loading");
+    const startTime = Date.now();
+    setGenerationStartTime(startTime);
 
     try {
       // Call the actual backend API
@@ -53,10 +57,13 @@ export default function Home() {
         ageRange: backendData.target_age || data.ageRange,
         generatedAt: new Date().toISOString(),
         coverImage: undefined,
+        style: backendData.style,
         pages: backendData.pages.map((page: any) => ({
           pageNumber: page.page_number,
           content: `${page.title}\n\n${page.text}`,
-          imageUrl: undefined,
+          imageUrl: page.image_url || undefined,
+          emotion: page.emotion,
+          imagePrompt: page.image_prompt,
         })),
       };
       
@@ -76,6 +83,7 @@ export default function Home() {
     setCurrentPage("home");
     setBookData(null);
     setGeneratedBook(null);
+    setGenerationStartTime(null);
   };
 
   return (
@@ -87,7 +95,7 @@ export default function Home() {
       )}
       
       {currentPage === "loading" && (
-        <LoadingPage onShowBook={handleShowBook} />
+        <LoadingPage onShowBook={handleShowBook} generationStartTime={generationStartTime} hasGeneratedBook={!!generatedBook} />
       )}
       
       {currentPage === "output" && generatedBook && (

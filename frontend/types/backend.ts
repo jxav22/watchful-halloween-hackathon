@@ -5,6 +5,7 @@ export interface StoryPage {
   text: string;
   emotion: string;
   image_prompt: string;
+  image_url?: string | null;
 }
 
 export interface StoryResponse {
