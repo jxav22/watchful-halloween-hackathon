@@ -33,8 +33,6 @@ export function LoadingPage({
   const [steps, setSteps] = useState<GenerationProgress[]>(GENERATION_STEPS);
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
-  const [generatedBook, setGeneratedBook] = useState<BookOutput | null>(null);
-  const [baseDelay, setBaseDelay] = useState(800);
   const hasCalledApi = useRef(false);
 
   // Main API call effect - triggers generation on mount
@@ -78,8 +76,14 @@ export function LoadingPage({
           })),
         };
         
-        setGeneratedBook(book);
         onGenerationComplete(book);
+        
+        // Mark all steps as complete once API call finishes
+        setTimeout(() => {
+          setSteps((prev) => prev.map((step) => ({ ...step, status: "completed" as const })));
+          setCurrentStep(steps.length);
+          setIsComplete(true);
+        }, 300);
       } catch (error) {
         console.error("Failed to generate book:", error);
         const errorMessage = error instanceof Error ? error.message : "Failed to generate book";
@@ -93,50 +97,24 @@ export function LoadingPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When generation completes, accelerate to finish quickly
+  // Animate through steps while API is loading
   useEffect(() => {
-    if (generatedBook && !isComplete) {
-      // Fast-forward remaining steps
-      const remainingSteps = steps.length - currentStep;
-      if (remainingSteps > 0) {
-        // Complete all remaining steps quickly
-        setTimeout(() => {
-          setSteps((prev) =>
-            prev.map((step, idx) => {
-              if (idx >= currentStep) {
-                return { ...step, status: "completed" as const };
-              }
-              return step;
-            })
-          );
-          setCurrentStep(steps.length);
-          setIsComplete(true);
-        }, Math.max(300, baseDelay * 0.3)); // Quick completion
-      }
-    }
-  }, [generatedBook, isComplete, currentStep, steps, baseDelay]);
+    if (isComplete || currentStep >= steps.length) return;
 
-  // Step progression animation
-  useEffect(() => {
-    if (currentStep < steps.length && !generatedBook) {
-      const timer = setTimeout(() => {
-        setSteps((prev) =>
-          prev.map((step, idx) => {
-            if (idx === currentStep) {
-              return { ...step, status: "completed" };
-            }
-            return step;
-          })
-        );
-        setCurrentStep((prev) => prev + 1);
-      }, baseDelay);
+    const timer = setTimeout(() => {
+      setSteps((prev) =>
+        prev.map((step, idx) => {
+          if (idx === currentStep) {
+            return { ...step, status: "completed" };
+          }
+          return step;
+        })
+      );
+      setCurrentStep((prev) => prev + 1);
+    }, 5000);
 
-      return () => clearTimeout(timer);
-    } else if (!isComplete && !generatedBook && currentStep >= steps.length) {
-      // All steps completed but still waiting for API
-      setIsComplete(true);
-    }
-  }, [currentStep, steps.length, isComplete, baseDelay, generatedBook]);
+    return () => clearTimeout(timer);
+  }, [currentStep, steps.length, isComplete]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
@@ -158,7 +136,7 @@ export function LoadingPage({
               <div className="flex-shrink-0 mt-1">
                 {stepItem.status === "completed" ? (
                   <Check className="h-5 w-5 text-green-400" />
-                ) : idx === currentStep && !generatedBook ? (
+                ) : idx === currentStep ? (
                   <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
                 ) : (
                   <div className="h-5 w-5 rounded-full border-2 border-gray-600" />
