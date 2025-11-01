@@ -63,9 +63,32 @@ export class OpenAIService {
   }
 
   /**
+   * Sanitize image prompt to ensure it's safe for children's content
+   */
+  private sanitizeImagePrompt(prompt: string): string {
+    // Remove any potentially problematic words (case-insensitive)
+    let sanitized = prompt.replace(/\b(scary|dark|fear|violence|weapon|fight|attack|danger|threat|horror|creepy)\b/gi, '');
+    
+    // Clean up extra spaces
+    sanitized = sanitized.replace(/\s+/g, ' ').trim();
+    
+    // Ensure it starts with positive, child-friendly language if needed
+    const lowerPrompt = sanitized.toLowerCase();
+    if (!lowerPrompt.startsWith('a friendly') && 
+        !lowerPrompt.startsWith('a cute') && 
+        !lowerPrompt.startsWith('a happy') &&
+        !lowerPrompt.startsWith('an adorable')) {
+      sanitized = `A friendly ${sanitized}`;
+    }
+    
+    return sanitized;
+  }
+
+  /**
    * Enhance image prompt with illustration direction style and character consistency
    * Matches the exact art style defined in storyPrompt.ts (lines 26-30)
    * Emphasizes kid-friendly appearance and character consistency
+   * Structured to pass OpenAI safety filters for children's content
    */
   private enhanceImagePrompt(
     imagePrompt: string,
@@ -73,19 +96,27 @@ export class OpenAIService {
     storyText: string,
     pageNumber: number,
   ): string {
-    // Kid-friendly requirements
-    const kidFriendly = `Kid-friendly children's book illustration: friendly faces, soft rounded features, bright cheerful colors, safe happy environment, non-threatening, warm and inviting, age-appropriate`;
+    // Sanitize the original prompt first
+    const sanitizedPrompt = this.sanitizeImagePrompt(imagePrompt);
+    // Start with explicit children's book context for safety
+    const bookContext = `A safe, appropriate, innocent illustration for a children's storybook page`;
     
-    // Art style from storyPrompt.ts lines 26-30, with Bugs Bunny reference
-    const artStyleInstructions = `Art style: Disney-Pixar × Looney Toons. The character could look like Bugs Bunny from Looney Toons with expressive large friendly eyes`;
+    // Emphasize Disney character features for kids
+    const disneyCharacterFeatures = `Character must have classic Disney character features for children: large expressive eyes (like Disney princesses and animals), soft rounded face shape, warm friendly smile, gentle features, cute adorable appearance, Disney's signature character design style from classic animated films`;
     
-    // Strong character consistency instructions
+    // Kid-friendly visual requirements
+    const kidFriendly = `Friendly cartoon character with soft rounded features, bright cheerful colors, happy expression, safe and warm environment, suitable for young children`;
+    
+    // Art style from storyPrompt.ts lines 26-30, with emphasis on Disney
+    const artStyleInstructions = `Art style: Disney-Pixar × Looney Toons animation. Strong emphasis on Disney character design for kids: Disney classic animation character features, expressive large eyes like Disney characters, warm friendly appearance like Disney animals and characters. Character could also be inspired by Bugs Bunny from Looney Toons`;
+    
+    // Character consistency instructions (worded carefully)
     const consistencyNote = pageNumber === 1 
-      ? `Establish ONE main character with very specific design: same face shape, same eye color, same fur/skin color, same size, same clothing style, same distinctive features. This exact character design MUST be repeated identically in all 5 pages`
-      : `CRITICAL: Use the EXACT SAME character from page 1: identical face, identical eye color, identical fur/skin color, identical size, identical clothing, identical distinctive features. The character must look exactly the same as page 1, just in a different scene or pose`;
+      ? `This is page 1. Design one main character with specific features: face shape, eye color, fur or skin color, size, clothing style, and distinctive features. This character design will appear on all 5 pages of the storybook`
+      : `This character must match exactly the character from page 1: same face, same eye color, same fur or skin color, same size, same clothing, same distinctive features. Show the same character from page 1 in this new scene`;
     
-    // Complete enhanced prompt
-    return `${imagePrompt}. ${kidFriendly}. ${artStyleInstructions}. ${consistencyNote}`;
+    // Complete enhanced prompt - structured to be safe and clear, with Disney emphasis
+    return `${bookContext}. ${sanitizedPrompt}. ${disneyCharacterFeatures}. ${kidFriendly}. ${artStyleInstructions}. ${consistencyNote}`;
   }
 
   /**
@@ -122,7 +153,16 @@ export class OpenAIService {
             console.log(`✓ [Page 1] Character design established: ${page1.image_url.substring(0, 50)}...`);
           }
         } catch (error) {
-          console.error(`✗ [Page 1] Failed:`, error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
+          // Check if it's a safety system rejection
+          if (errorMessage.includes('safety') || errorMessage.includes('rejected') || errorMessage.includes('policy')) {
+            console.warn(`⚠ [Page 1] Content safety rejection. This may be due to story content. Using static placeholder.`);
+            console.warn(`⚠ Original prompt was: ${page1.image_prompt?.substring(0, 100)}`);
+          } else {
+            console.error(`✗ [Page 1] Failed:`, errorMessage);
+          }
+          
           this.assignStaticImageUrl(page1, 0);
         }
       }
@@ -175,7 +215,15 @@ export class OpenAIService {
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          console.error(`✗ [Page ${page.page_number}] Failed to generate image:`, errorMessage);
+          
+          // Check if it's a safety system rejection
+          if (errorMessage.includes('safety') || errorMessage.includes('rejected') || errorMessage.includes('policy')) {
+            console.warn(`⚠ [Page ${page.page_number}] Content safety rejection. This may be due to story content. Using static placeholder.`);
+            console.warn(`⚠ Original prompt was: ${page.image_prompt?.substring(0, 100)}`);
+          } else {
+            console.error(`✗ [Page ${page.page_number}] Failed to generate image:`, errorMessage);
+          }
+          
           console.log(`[Page ${page.page_number}] Falling back to static placeholder`);
           this.assignStaticImageUrl(page, page.page_number - 1);
         }
