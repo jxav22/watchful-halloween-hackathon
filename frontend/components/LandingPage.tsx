@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import Image from "next/image";
 import type { BookGenerationRequest } from "@/types";
 
 interface LandingPageProps {
@@ -114,8 +114,16 @@ export function LandingPage({ onGenerate, onBack }: LandingPageProps) {
         </div>
 
         {/* Right Side - Preview */}
-        <div className="hidden lg:block">
-          <Card className="aspect-[3/4] bg-gradient-to-br from-gray-300 to-gray-400 border-0 shadow-2xl" />
+        <div className="hidden lg:flex lg:items-center lg:justify-center">
+          <div className="w-3/4 aspect-[3/4] relative rounded-lg overflow-hidden shadow-2xl">
+            <Image 
+              src="/Book.webp" 
+              alt="Book Preview" 
+              fill
+              className="object-contain"
+              priority
+            />
+          </div>
         </div>
       </div>
     </div>

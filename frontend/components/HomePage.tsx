@@ -1,103 +1,116 @@
 "use client";
 
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { BookOpen, Sparkles, Wand2 } from "lucide-react";
+import Image from "next/image";
 
 interface HomePageProps {
   onGetStarted: () => void;
 }
 
 export function HomePage({ onGetStarted }: HomePageProps) {
+  useEffect(() => {
+    // Force reinit of Unicorn Studio on component mount
+    if (window.UnicornStudio) {
+      window.UnicornStudio.isInitialized = false;
+    }
+
+    // Load Unicorn Studio script
+    if (!window.UnicornStudio) {
+      window.UnicornStudio = { isInitialized: false };
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v1.4.34/dist/unicornStudio.umd.js";
+      script.onload = () => {
+        if (window.UnicornStudio && !window.UnicornStudio.isInitialized) {
+          window.UnicornStudio.init?.();
+          window.UnicornStudio.isInitialized = true;
+        }
+      };
+      (document.head || document.body).appendChild(script);
+    } else {
+      // If script already loaded, just reinitialize
+      window.UnicornStudio.init?.();
+      window.UnicornStudio.isInitialized = true;
+    }
+
+    // Remove Unicorn Studio watermark after animation loads
+    const removeWatermark = setInterval(() => {
+      const projectDiv = document.querySelector('[data-us-project]');
+      if (projectDiv) {
+        // Remove all anchor tags within the project
+        const anchors = projectDiv.querySelectorAll('a');
+        anchors.forEach(anchor => {
+          anchor.remove();
+        });
+        
+        // Also check for any absolute positioned divs that might contain the badge
+        const absoluteDivs = projectDiv.querySelectorAll('div[style*="position: absolute"], div[style*="position: fixed"]');
+        absoluteDivs.forEach(div => {
+          const hasLink = div.querySelector('a');
+          if (hasLink) {
+            div.remove();
+          }
+        });
+      }
+    }, 500);
+
+    // Clean up after 10 seconds
+    setTimeout(() => clearInterval(removeWatermark), 10000);
+
+    return () => clearInterval(removeWatermark);
+  }, []);
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-8">
-      <div className="w-full max-w-4xl space-y-12">
-        {/* Hero Section */}
+    <div className="min-h-screen flex items-center justify-center p-8 bg-black">
+      <div className="w-full max-w-6xl space-y-12">
+        {/* Logo and Header */}
         <div className="text-center space-y-6">
           <div className="flex justify-center mb-6">
-            <div className="p-4 rounded-full bg-purple-500/20 backdrop-blur-sm">
-              <BookOpen className="h-16 w-16 text-purple-300" />
-            </div>
+            <Image 
+              src="/Logo.webp" 
+              alt="Hallofright Logo" 
+              width={300}
+              height={80}
+              className="object-contain"
+              priority
+            />
           </div>
           
-          <h1 className="text-6xl font-bold text-white leading-tight">
-            Welcome to <br />
-            <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              HalloFright
-            </span>
-          </h1>
+          <p className="text-lg text-gray-400">
+            Turn Horror stories into a kids children book
+          </p>
+        </div>
+
+        {/* Spooky Text with Unicorn Studio Animation */}
+        <div className="relative flex justify-center items-center min-h-[400px]">
+          <div 
+            data-us-project="XjVBhfu4P6vyklplWTaW" 
+            style={{ width: "100%", maxWidth: "1440px", height: "400px" }}
+          />
           
-          <p className="text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed">
-            Transform your stories into enchanting kid-friendly books. 
-            Create magical reading experiences with AI-powered content validation and beautiful illustrations.
-          </p>
-        </div>
-
-        {/* CTA Button */}
-        <div className="flex justify-center">
-          <Button
-            onClick={onGetStarted}
-            size="lg"
-            className="bg-white hover:bg-gray-100 text-black px-12 py-7 text-xl font-semibold rounded-xl shadow-2xl hover:scale-105 transition-transform duration-200"
-          >
-            <Wand2 className="mr-3 h-6 w-6" />
-            Create Your Book
-          </Button>
-        </div>
-
-        {/* Feature Cards */}
-        <div className="grid md:grid-cols-3 gap-6 mt-16">
-          <Card className="p-6 bg-card/30 border-border backdrop-blur-sm hover:bg-card/40 transition-colors">
-            <div className="flex flex-col items-center text-center space-y-4">
-              <div className="p-3 rounded-full bg-purple-500/20">
-                <BookOpen className="h-8 w-8 text-purple-300" />
-              </div>
-              <h3 className="text-lg font-semibold text-white">
-                Story Input
-              </h3>
-              <p className="text-sm text-gray-400 leading-relaxed">
-                Paste your story and customize it for your child&apos;s age group
-              </p>
-            </div>
-          </Card>
-
-          <Card className="p-6 bg-card/30 border-border backdrop-blur-sm hover:bg-card/40 transition-colors">
-            <div className="flex flex-col items-center text-center space-y-4">
-              <div className="p-3 rounded-full bg-pink-500/20">
-                <Sparkles className="h-8 w-8 text-pink-300" />
-              </div>
-              <h3 className="text-lg font-semibold text-white">
-                AI Validation
-              </h3>
-              <p className="text-sm text-gray-400 leading-relaxed">
-                Smart content filtering ensures age-appropriate material
-              </p>
-            </div>
-          </Card>
-
-          <Card className="p-6 bg-card/30 border-border backdrop-blur-sm hover:bg-card/40 transition-colors">
-            <div className="flex flex-col items-center text-center space-y-4">
-              <div className="p-3 rounded-full bg-purple-500/20">
-                <Wand2 className="h-8 w-8 text-purple-300" />
-              </div>
-              <h3 className="text-lg font-semibold text-white">
-                Beautiful Books
-              </h3>
-              <p className="text-sm text-gray-400 leading-relaxed">
-                Generate stunning illustrated pages ready for reading
-              </p>
-            </div>
-          </Card>
-        </div>
-
-        {/* Additional Info */}
-        <div className="text-center pt-8">
-          <p className="text-sm text-gray-500">
-            🎃 Built for Halloween Hackathon • Making stories kid-friendly since 2025
-          </p>
+          {/* CTA Button positioned to cover watermark */}
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50">
+            <Button
+              onClick={onGetStarted}
+              size="lg"
+              className="bg-white hover:bg-gray-100 text-black px-8 py-6 text-base font-medium rounded-full shadow-2xl hover:scale-105 transition-transform duration-200 flex items-center gap-2"
+            >
+              🎃 Create your Story Book
+            </Button>
+          </div>
         </div>
       </div>
     </div>
   );
+}
+
+// TypeScript declaration for window.UnicornStudio
+declare global {
+  interface Window {
+    UnicornStudio?: {
+      isInitialized: boolean;
+      init?: () => void;
+    };
+  }
 }
 
