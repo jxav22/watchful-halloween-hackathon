@@ -46,9 +46,7 @@ export class OpenAIService {
         console.log('Starting image generation for all pages...');
         await this.generateImagesForStory(storyResponse, text, paragraph);
       } else {
-        console.log('Image generation skipped, using static placeholders');
-        // Assign static image URLs if image generation is disabled
-        this.assignStaticImageUrls(storyResponse);
+        console.log('Image generation skipped');
       }
 
       // Verify final image URLs
@@ -151,19 +149,22 @@ export class OpenAIService {
           page1.image_url = image1.data?.[0]?.url || null;
           if (page1.image_url) {
             console.log(`✓ [Page 1] Character design established: ${page1.image_url.substring(0, 50)}...`);
+          } else {
+            console.warn(`⚠ [Page 1] No image URL returned`);
+            page1.image_url = null;
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           
           // Check if it's a safety system rejection
           if (errorMessage.includes('safety') || errorMessage.includes('rejected') || errorMessage.includes('policy')) {
-            console.warn(`⚠ [Page 1] Content safety rejection. This may be due to story content. Using static placeholder.`);
+            console.warn(`⚠ [Page 1] Content safety rejection. This may be due to story content.`);
             console.warn(`⚠ Original prompt was: ${page1.image_prompt?.substring(0, 100)}`);
           } else {
-            console.error(`✗ [Page 1] Failed:`, errorMessage);
+            console.error(`✗ [Page 1] Failed to generate image:`, errorMessage);
           }
           
-          this.assignStaticImageUrl(page1, 0);
+          page1.image_url = null;
         }
       }
 
@@ -182,8 +183,8 @@ export class OpenAIService {
           console.log(`[Page ${page.page_number}] Generating image (maintaining character consistency)...`);
           
           if (!page.image_prompt || page.image_prompt.trim() === '') {
-            console.warn(`[Page ${page.page_number}] No image_prompt found, using static placeholder`);
-            this.assignStaticImageUrl(page, page.page_number - 1);
+            console.warn(`[Page ${page.page_number}] No image_prompt found`);
+            page.image_url = null;
             continue;
           }
           
@@ -210,60 +211,32 @@ export class OpenAIService {
           if (imageUrl) {
             console.log(`✓ [Page ${page.page_number}] DALL-E image generated: ${imageUrl.substring(0, 50)}...`);
           } else {
-            console.warn(`⚠ [Page ${page.page_number}] No URL in response, using static placeholder`);
-            this.assignStaticImageUrl(page, page.page_number - 1);
+            console.warn(`⚠ [Page ${page.page_number}] No URL in response`);
+            page.image_url = null;
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           
           // Check if it's a safety system rejection
           if (errorMessage.includes('safety') || errorMessage.includes('rejected') || errorMessage.includes('policy')) {
-            console.warn(`⚠ [Page ${page.page_number}] Content safety rejection. This may be due to story content. Using static placeholder.`);
+            console.warn(`⚠ [Page ${page.page_number}] Content safety rejection. This may be due to story content.`);
             console.warn(`⚠ Original prompt was: ${page.image_prompt?.substring(0, 100)}`);
           } else {
             console.error(`✗ [Page ${page.page_number}] Failed to generate image:`, errorMessage);
           }
           
-          console.log(`[Page ${page.page_number}] Falling back to static placeholder`);
-          this.assignStaticImageUrl(page, page.page_number - 1);
+          page.image_url = null;
         }
       }
 
       const dalleImageCount = storyResponse.pages.filter(
-        (p) => p.image_url && !p.image_url.includes('placeholder')
+        (p) => p.image_url
       ).length;
-      const staticCount = storyResponse.pages.length - dalleImageCount;
-      console.log(`✅ Image generation complete: ${dalleImageCount} DALL-E image(s) + ${staticCount} static placeholder(s)`);
+      const failedCount = storyResponse.pages.length - dalleImageCount;
+      console.log(`✅ Image generation complete: ${dalleImageCount}/${storyResponse.pages.length} DALL-E image(s) generated${failedCount > 0 ? `, ${failedCount} failed` : ''}`);
     } catch (error) {
       console.error('❌ Critical error generating images:', error);
     }
-  }
-
-  /**
-   * Assign static image URL to a single page
-   */
-  private assignStaticImageUrl(page: StoryResponse['pages'][0], index: number): void {
-    const colors = ['4A90E2', '50C878', 'FF6B6B', 'FFD93D', '6C5CE7'];
-    const color = colors[index % colors.length];
-    page.image_url = `https://via.placeholder.com/1024x1024/${color}/FFFFFF?text=Page+${page.page_number}`;
-    console.log(`[Page ${page.page_number}] Assigned static placeholder URL`);
-  }
-
-  /**
-   * Assign static image URLs to each page
-   * Using placeholder.com service as fallback
-   */
-  private assignStaticImageUrls(storyResponse: StoryResponse): void {
-    storyResponse.pages.forEach((page, index) => {
-      // Using placeholder.com with different colors for each page
-      const colors = ['4A90E2', '50C878', 'FF6B6B', 'FFD93D', '6C5CE7'];
-      const color = colors[index % colors.length];
-      
-      // Static placeholder image URL (1024x1024)
-      page.image_url = `https://via.placeholder.com/1024x1024/${color}/FFFFFF?text=Page+${page.page_number}`;
-      
-      console.log(`Assigned static image URL for page ${page.page_number}`);
-    });
   }
 
   private parseJsonResponse(content: string): StoryResponse {
