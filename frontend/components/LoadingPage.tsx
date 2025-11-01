@@ -35,6 +35,25 @@ export function LoadingPage({
   const [isComplete, setIsComplete] = useState(false);
   const hasCalledApi = useRef(false);
 
+  // Preload all images from the book using native browser Image API
+  // This is the recommended approach for dynamic remote URLs in Next.js
+  const preloadImages = (pages: Array<{ imageUrl?: string }>) => {
+    const imagePromises = pages
+      .map((page) => page.imageUrl)
+      .filter((url): url is string => !!url)
+      .map(
+        (url) =>
+          new Promise<void>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+            img.src = url;
+          })
+      );
+    
+    return Promise.all(imagePromises);
+  };
+
   // Main API call effect - triggers generation on mount
   useEffect(() => {
     if (hasCalledApi.current) return; // Prevent duplicate calls
@@ -78,6 +97,11 @@ export function LoadingPage({
         
         onGenerationComplete(book);
         
+        // Preload all images in the background
+        preloadImages(book.pages).catch((error) => {
+          console.warn("Some images failed to preload:", error);
+        });
+        
         // Mark all steps as complete once API call finishes
         setTimeout(() => {
           setSteps((prev) => prev.map((step) => ({ ...step, status: "completed" as const })));
@@ -111,7 +135,7 @@ export function LoadingPage({
         })
       );
       setCurrentStep((prev) => prev + 1);
-    }, 5000);
+    }, 20000);
 
     return () => clearTimeout(timer);
   }, [currentStep, steps.length, isComplete]);
