@@ -23,7 +23,6 @@ export function OutputPage({ book, onBack }: OutputPageProps) {
             Back
           </Button>
           <h1 className="text-4xl font-bold text-white">Book output</h1>
-          <p className="text-gray-400 text-sm">How you do this</p>
         </div>
 
         {/* Book Pages Grid */}
